@@ -66,7 +66,7 @@ extern "C" void x14hash(void *output, const void *input)
 	sph_echo512_context ctx_echo;
 	sph_hamsi512_context ctx_hamsi;
 	sph_fugue512_context ctx_fugue;
-	sph_shabal512_context ctx_shabal;
+	//sph_shabal512_context ctx_shabal;
 
 	sm3_ctx_t ctx_sm3;
 
@@ -118,7 +118,7 @@ extern "C" void x14hash(void *output, const void *input)
 	sm3_init(&ctx_sm3);
 	sph_sm3(&ctx_sm3, (const void*)hash, 64);
 	sph_sm3_close(&ctx_sm3, (void*)(hashB));
-	memset(&(hashB)[8], 0, 32);
+	memset(hashB+32, 0, 32);
 
 	sph_hamsi512_init(&ctx_hamsi);
 	sph_hamsi512(&ctx_hamsi, (hashB), 64);
@@ -216,9 +216,10 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 			const uint32_t Htarg = ptarget[7];
 			uint32_t vhash64[8];
 			/* check now with the CPU to confirm */
+			for (int k = 0; k < 20; k++)
+				be32enc(&endiandata[k], pdata[k]);
 			be32enc(&endiandata[19], foundNonce);
 			x14hash(vhash64, endiandata);
-			memset(vhash64, 0, 32);
 
 			if (vhash64[7] <= Htarg && fulltest(vhash64, ptarget)) {
 				int res = 1;
@@ -227,7 +228,6 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 				if (secNonce != 0) {
 					be32enc(&endiandata[19], secNonce);
 					x14hash(vhash64, endiandata);
-					memset(vhash64, 0, 32);
 					if (bn_hash_target_ratio(vhash64, ptarget) > work->shareratio[0])
 						work_set_target_ratio(work, vhash64);
 					pdata[21] = secNonce;

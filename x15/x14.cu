@@ -30,6 +30,7 @@ extern "C" {
 
 // Memory for the hash functions
 static uint32_t *d_hash[MAX_GPUS] = { 0 };
+static uint32_t *h_found[MAX_GPUS];
 
 extern void x13_hamsi512_cpu_init(int thr_id, uint32_t threads);
 extern void x13_hamsi512_cpu_hash_64(int thr_id, uint32_t threads, uint32_t startNounce, uint32_t *d_nonceVector, uint32_t *d_hash, int order);
@@ -43,6 +44,7 @@ extern void x14_shabal512_cpu_hash_64(int thr_id, uint32_t threads, uint32_t sta
 
 extern void x14_sm3_cpu_init(int thr_id, uint32_t threads);
 void x14_sm3_cpu_hash_64(int thr_id, uint32_t threads, uint32_t startNounce, uint32_t *d_nonceVector, uint32_t *d_hash, int order);
+void quark_jh512Keccak512_cpu_hash_64(int thr_id, uint32_t threads, uint32_t startNounce, uint32_t *d_nonceVector, uint32_t *d_hash, int order);
 
 
 // X14 CPU Hash function
@@ -132,6 +134,9 @@ extern "C" void x14hash(void *output, const void *input)
 }
 
 static bool init[MAX_GPUS] = { 0 };
+extern void x13_fugue512_cpu_hash_64_final(int thr_id, uint32_t threads, uint32_t startNounce, uint32_t *d_nonceVector,
+	uint32_t *d_hash, int order, uint32_t *res);
+extern void x13_fugue512_cpu_setTarget(const void *ptarget);
 
 extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, unsigned long *hashes_done)
 {
@@ -175,6 +180,7 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 		cuda_check_cpu_init(thr_id, throughput);
 
 		cudaMalloc(&d_hash[thr_id], (size_t) 64 * throughput);
+		cudaMallocHost(&(h_found[thr_id]), 2 * sizeof(uint32_t));
 
 		CUDA_LOG_ERROR();
 
@@ -185,7 +191,8 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 		be32enc(&endiandata[k], pdata[k]);
 
 	quark_blake512_cpu_setBlock_80(thr_id, endiandata);
-	cuda_check_cpu_setTarget(ptarget);
+	//cuda_check_cpu_setTarget(ptarget);
+	x13_fugue512_cpu_setTarget(ptarget);
 
 	do {
 		int order = 0;
@@ -193,8 +200,9 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 		quark_bmw512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
 		quark_groestl512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
 		quark_skein512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
-		quark_jh512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
-		quark_keccak512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
+		//quark_jh512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
+		//quark_keccak512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
+		quark_jh512Keccak512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
 		x11_luffaCubehash512_cpu_hash_64(thr_id, throughput, d_hash[thr_id], order++);
 		x11_shavite512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
 		x11_simd512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
@@ -203,29 +211,33 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 		x14_sm3_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
 
 		x13_hamsi512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
-		x13_fugue512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
+		//x13_fugue512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
+		x13_fugue512_cpu_hash_64_final(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++, h_found[thr_id]);
 
 		CUDA_LOG_ERROR();
 
 		*hashes_done = pdata[19] - first_nonce + throughput;
 
-		uint32_t foundNonce = cuda_check_hash(thr_id, throughput, pdata[19], d_hash[thr_id]);
+		//uint32_t foundNonce = cuda_check_hash(thr_id, throughput, pdata[19], d_hash[thr_id]);
 
-		if (foundNonce != UINT32_MAX)
+		if (h_found[thr_id][0] != UINT32_MAX)
 		{
 			const uint32_t Htarg = ptarget[7];
 			uint32_t vhash64[8];
 			/* check now with the CPU to confirm */
 			for (int k = 0; k < 20; k++)
 				be32enc(&endiandata[k], pdata[k]);
-			be32enc(&endiandata[19], foundNonce);
+			be32enc(&endiandata[19], h_found[thr_id][0]);
 			x14hash(vhash64, endiandata);
 
 			if (vhash64[7] <= Htarg && fulltest(vhash64, ptarget)) {
 				int res = 1;
-				uint32_t secNonce = cuda_check_hash_suppl(thr_id, throughput, pdata[19], d_hash[thr_id], 1);
+				uint32_t secNonce = h_found[thr_id][1];
+				//cuda_check_hash_suppl(thr_id, throughput, pdata[19], d_hash[thr_id], 1);
 				work_set_target_ratio(work, vhash64);
 				if (secNonce != 0) {
+					for (int k = 0; k < 20; k++)
+						be32enc(&endiandata[k], pdata[k]);
 					be32enc(&endiandata[19], secNonce);
 					x14hash(vhash64, endiandata);
 					if (bn_hash_target_ratio(vhash64, ptarget) > work->shareratio[0])
@@ -233,10 +245,10 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 					pdata[21] = secNonce;
 					res++;
 				}
-				pdata[19] = foundNonce;
+				pdata[19] = h_found[thr_id][0];
 				return res;
 			} else {
-				gpulog(LOG_WARNING, thr_id, "result for %08x does not validate on CPU!", foundNonce);
+				gpulog(LOG_WARNING, thr_id, "result for %08x does not validate on CPU!", h_found[thr_id][0]);
 			}
 		}
 

@@ -232,23 +232,24 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 
 			if (vhash64[7] <= Htarg && fulltest(vhash64, ptarget)) {
 				int res = 1;
-				uint32_t secNonce = h_found[thr_id][1];
-				//cuda_check_hash_suppl(thr_id, throughput, pdata[19], d_hash[thr_id], 1);
-				work_set_target_ratio(work, vhash64);
-				if (secNonce != 0) {
-					for (int k = 0; k < 20; k++)
-						be32enc(&endiandata[k], pdata[k]);
-					be32enc(&endiandata[19], secNonce);
-					x14hash(vhash64, endiandata);
-					if (bn_hash_target_ratio(vhash64, ptarget) > work->shareratio[0])
-						work_set_target_ratio(work, vhash64);
-					pdata[21] = secNonce;
-					res++;
-				}
+				//uint32_t secNonce = h_found[thr_id][1];
+				////cuda_check_hash_suppl(thr_id, throughput, pdata[19], d_hash[thr_id], 1);
+				//work_set_target_ratio(work, vhash64);
+				//if (secNonce != 0) {
+				//	for (int k = 0; k < 20; k++)
+				//		be32enc(&endiandata[k], pdata[k]);
+				//	be32enc(&endiandata[19], secNonce);
+				//	x14hash(vhash64, endiandata);
+				//	if (bn_hash_target_ratio(vhash64, ptarget) > work->shareratio[0])
+				//		work_set_target_ratio(work, vhash64);
+				//	pdata[21] = secNonce;
+				//	res++;
+				//}
 				pdata[19] = h_found[thr_id][0];
 				return res;
 			} else {
-				gpulog(LOG_WARNING, thr_id, "result for %08x does not validate on CPU!", h_found[thr_id][0]);
+				if (vhash64[7] > Htarg)
+					gpulog(LOG_WARNING, thr_id, "result for %08x does not validate on CPU!", h_found[thr_id][0]);
 			}
 		}
 

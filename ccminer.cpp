@@ -103,19 +103,19 @@ static bool opt_background = false;
 bool opt_quiet = false;
 int opt_maxlograte = 3;
 static int opt_retries = -1;
-static int opt_fail_pause = 30;
+static int opt_fail_pause = 15;
 int opt_time_limit = -1;
 int opt_shares_limit = -1;
 time_t firstwork_time = 0;
-int opt_timeout = 300; // curl
-int opt_scantime = 30;
+int opt_timeout = 60; // curl
+int opt_scantime = 3;
 static json_t *opt_config;
 static const bool opt_time = true;
 volatile enum sha_algos opt_algo = ALGO_AUTO;
 int opt_n_threads = 0;
 int gpu_threads = 1;
 int64_t opt_affinity = -1L;
-int opt_priority = 0;
+int opt_priority = 4;
 static double opt_difficulty = 1.;
 bool opt_extranonce = true;
 bool opt_trust_pool = false;
@@ -1741,8 +1741,8 @@ static void *miner_thread(void *userdata)
 
 	memset(&work, 0, sizeof(work)); // prevent work from being used uninitialized
 
-	if (opt_priority > 0) {
-		int prio = 2; // default to normal
+	if (opt_priority > 4) {
+		int prio = 4; // max: THREAD_PRIORITY_HIGHEST
 #ifndef WIN32
 		prio = 0;
 		// note: different behavior on linux (-19 to 19)
@@ -1833,7 +1833,7 @@ static void *miner_thread(void *userdata)
 			if (opt_algo == ALGO_DECRED)
 				work_done = true; // force "regen" hash
 			while (!work_done && time(NULL) >= (g_work_time + opt_scantime)) {
-				usleep(100*1000);
+				usleep(10*1000);
 				if (sleeptime > 4) {
 					extrajob = true;
 					break;
@@ -1841,7 +1841,7 @@ static void *miner_thread(void *userdata)
 				sleeptime++;
 			}
 			if (sleeptime && opt_debug && !opt_quiet)
-				applog(LOG_DEBUG, "sleeptime: %u ms", sleeptime*100);
+				applog(LOG_DEBUG, "sleeptime: %u ms", sleeptime*10);
 			nonceptr = (uint32_t*) (((char*)work.data) + wcmplen);
 			pthread_mutex_lock(&g_work_lock);
 			extrajob |= work_done;
@@ -2412,10 +2412,15 @@ static void *miner_thread(void *userdata)
 		if (check_dups && opt_algo != ALGO_DECRED && opt_algo != ALGO_SIA)
 			hashlog_remember_scan_range(&work);
 
+		float temp = 0.;
+#ifdef USE_WRAPNVML
+		struct cgpu_info * cgpu = &thr_info[thr_id].gpu;
+		temp = gpu_temp(cgpu);
+#endif
 		/* output */
 		if (!opt_quiet && loopcnt > 1 && (time(NULL) - tm_rate_log) > opt_maxlograte) {
 			format_hashrate(thr_hashrates[thr_id], s);
-			gpulog(LOG_INFO, thr_id, "%s, %s", device_name[dev_id], s);
+			gpulog(LOG_INFO, thr_id, "%s, %s, %d C", device_name[dev_id], s, (int)temp);
 			tm_rate_log = time(NULL);
 		}
 

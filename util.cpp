@@ -216,7 +216,7 @@ void format_hashrate(double hashrate, char *output)
 	if (hashrate < 10000) {
 		// nop
 	}
-	else if (hashrate < 1e7) {
+	else if (hashrate < 1e6) {
 		prefix = 'k';
 		hashrate *= 1e-3;
 	}
@@ -235,7 +235,7 @@ void format_hashrate(double hashrate, char *output)
 
 	sprintf(
 		output,
-		prefix ? "%.2f %cH/s" : "%.2f H/s%c",
+		prefix ? "%.3f %cH/s" : "%.2f H/s%c",
 		hashrate, prefix
 	);
 }

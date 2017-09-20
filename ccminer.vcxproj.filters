@@ -273,9 +273,6 @@
     <ClCompile Include="bench.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="bignum.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="nvapi.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -283,6 +280,12 @@
       <Filter>Source Files\sia</Filter>
     </ClCompile>
     <ClCompile Include="sph\tiger.c">
+      <Filter>Source Files\sph</Filter>
+    </ClCompile>
+    <ClCompile Include="bignum.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sph\sm3.c">
       <Filter>Source Files\sph</Filter>
     </ClCompile>
   </ItemGroup>
@@ -807,6 +810,9 @@
     </CudaCompile>
     <CudaCompile Include="m7\m7_whirlpool512.cu">
       <Filter>Source Files\CUDA\m7</Filter>
+    </CudaCompile>
+    <CudaCompile Include="x15\cuda_x14_sm3.cu">
+      <Filter>Source Files\CUDA\x15</Filter>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>

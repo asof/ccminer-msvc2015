@@ -26,6 +26,7 @@ extern "C" {
 
 #include "cuda_helper.h"
 #include "x11/cuda_x11.h"
+#include "sph/sph_sm3.h"
 
 // Memory for the hash functions
 static uint32_t *d_hash[MAX_GPUS] = { 0 };
@@ -39,6 +40,9 @@ extern void x13_fugue512_cpu_free(int thr_id);
 
 extern void x14_shabal512_cpu_init(int thr_id, uint32_t threads);
 extern void x14_shabal512_cpu_hash_64(int thr_id, uint32_t threads, uint32_t startNounce, uint32_t *d_nonceVector, uint32_t *d_hash, int order);
+
+extern void x14_sm3_cpu_init(int thr_id, uint32_t threads);
+void x14_sm3_cpu_hash_64(int thr_id, uint32_t threads, uint32_t startNounce, uint32_t *d_nonceVector, uint32_t *d_hash, int order);
 
 
 // X14 CPU Hash function
@@ -63,6 +67,8 @@ extern "C" void x14hash(void *output, const void *input)
 	sph_hamsi512_context ctx_hamsi;
 	sph_fugue512_context ctx_fugue;
 	sph_shabal512_context ctx_shabal;
+
+	sm3_ctx_t ctx_sm3;
 
 	sph_blake512_init(&ctx_blake);
 	sph_blake512(&ctx_blake, input, 80);
@@ -108,19 +114,21 @@ extern "C" void x14hash(void *output, const void *input)
 	sph_echo512(&ctx_echo, hashB, 64);
 	sph_echo512_close(&ctx_echo, hash);
 
+	//////sm3 is 256bit
+	sm3_init(&ctx_sm3);
+	sph_sm3(&ctx_sm3, (const void*)hash, 64);
+	sph_sm3_close(&ctx_sm3, (void*)(hashB));
+	memset(&(hashB)[8], 0, 32);
+
 	sph_hamsi512_init(&ctx_hamsi);
-	sph_hamsi512(&ctx_hamsi, hash, 64);
-	sph_hamsi512_close(&ctx_hamsi, hashB);
+	sph_hamsi512(&ctx_hamsi, (hashB), 64);
+	sph_hamsi512_close(&ctx_hamsi, hash);
 
 	sph_fugue512_init(&ctx_fugue);
-	sph_fugue512(&ctx_fugue, hashB, 64);
-	sph_fugue512_close(&ctx_fugue, hash);
+	sph_fugue512(&ctx_fugue, hash, 64);
+	sph_fugue512_close(&ctx_fugue, hashB);
 
-	sph_shabal512_init(&ctx_shabal);
-	sph_shabal512(&ctx_shabal, hash, 64);
-	sph_shabal512_close(&ctx_shabal, hash);
-
-	memcpy(output, hash, 32);
+	memcpy(output, (hashB), 32);
 }
 
 static bool init[MAX_GPUS] = { 0 };
@@ -159,9 +167,10 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 		x11_shavite512_cpu_init(thr_id, throughput);
 		x11_simd512_cpu_init(thr_id, throughput);
 		x11_echo512_cpu_init(thr_id, throughput);
+
 		x13_hamsi512_cpu_init(thr_id, throughput);
 		x13_fugue512_cpu_init(thr_id, throughput);
-		x14_shabal512_cpu_init(thr_id, throughput);
+		//x14_shabal512_cpu_init(thr_id, throughput);
 
 		cuda_check_cpu_init(thr_id, throughput);
 
@@ -190,9 +199,11 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 		x11_shavite512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
 		x11_simd512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
 		x11_echo512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
+
+		x14_sm3_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
+
 		x13_hamsi512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
 		x13_fugue512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
-		x14_shabal512_cpu_hash_64(thr_id, throughput, pdata[19], NULL, d_hash[thr_id], order++);
 
 		CUDA_LOG_ERROR();
 
@@ -207,6 +218,7 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 			/* check now with the CPU to confirm */
 			be32enc(&endiandata[19], foundNonce);
 			x14hash(vhash64, endiandata);
+			memset(vhash64, 0, 32);
 
 			if (vhash64[7] <= Htarg && fulltest(vhash64, ptarget)) {
 				int res = 1;
@@ -215,6 +227,7 @@ extern "C" int scanhash_x14(int thr_id,  struct work* work, uint32_t max_nonce, 
 				if (secNonce != 0) {
 					be32enc(&endiandata[19], secNonce);
 					x14hash(vhash64, endiandata);
+					memset(vhash64, 0, 32);
 					if (bn_hash_target_ratio(vhash64, ptarget) > work->shareratio[0])
 						work_set_target_ratio(work, vhash64);
 					pdata[21] = secNonce;
